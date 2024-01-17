@@ -55,8 +55,10 @@ def label_img_to_rgb(label_img):
 
 class SegmentationData(data.Dataset):
 
-    def __init__(self, image_paths_file):
+    def __init__(self, image_paths_file, mode='train'):
         self.root_dir_name = os.path.dirname(image_paths_file)
+
+        self.mode = mode
 
         with open(image_paths_file) as f:
             self.image_names = f.read().splitlines()
@@ -79,31 +81,45 @@ class SegmentationData(data.Dataset):
     def __len__(self):
         return len(self.image_names)
     
-    def get_transform(self, image, mask):
+    def get_transform(self, image):
         """Transform image and mask."""
-        composed_transforms = albu.Compose([
-            albu.HorizontalFlip(),
-            albu.VerticalFlip(),
-            albu.RandomRotate90(),
-            albu.Normalize(),
-            albu.pytorch.ToTensorV2()
-        ])
-        return composed_transforms(image=image, mask=mask)
+        if self.mode == 'train':
+            composed_transforms = transforms.Compose([
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomVerticalFlip(),
+                transforms.ToTensor(),
+                transforms.CenterCrop(240),
+                transforms.Normalize([0.485, 0.456, 0.406],
+                                     [0.229, 0.224, 0.225])
+            ])
+        elif self.mode == 'val':
+            composed_transforms = transforms.Compose([
+                transforms.CenterCrop(240),
+                transforms.Normalize([0.485, 0.456, 0.406],
+                                     [0.229, 0.224, 0.225])
+            ])
+        elif self.mode == 'test':
+            composed_transforms = transforms.Compose([
+                transforms.CenterCrop(240),
+                transforms.ToTensor(),
+            ])
+        return composed_transforms(image)
 
     def get_item_from_index(self, index):
         to_tensor = transforms.ToTensor()
         img_id = self.image_names[index].replace('.bmp', '')
-
         img = Image.open(os.path.join(self.root_dir_name,
                                       'images',
                                       img_id + '.bmp')).convert('RGB')
+
         center_crop = transforms.CenterCrop(240)
-        img = center_crop(img)
         img = to_tensor(img)
+        img = center_crop(img)
 
         target = Image.open(os.path.join(self.root_dir_name,
                                          'targets',
                                          img_id + '_GT.bmp'))
+
         target = center_crop(target)
         target = np.array(target, dtype=np.int64)
 
